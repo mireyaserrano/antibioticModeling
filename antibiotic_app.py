@@ -54,13 +54,13 @@ filtered_df = df_melted[
 # visual rendering
 
 if not filtered_df.empty:
-    main_chart = alt.Chart(filtered_df).mark_bar().encode(
-        x=alt.X(
+    main = alt.Chart(filtered_df).mark_bar().encode(
+        y=alt.Y(
             "Bacteria:N",
-            sort="-y", #highest y-axis values (MIC) appear most->least resistant
+            sort="-x", #order by MIC hi-lo
             title="Bacteria"
         ),
-        y=alt.Y(
+        x=alt.X(
             "log_MIC:Q",
             title="log₁₀(MIC μg/mL)"
         ),
@@ -70,16 +70,65 @@ if not filtered_df.empty:
             legend=alt.Legend(title="log(MIC)")
         ),
         tooltip=["Bacteria", "Antibiotic", "MIC", "Gram_Staining", "Genus"]
-    ).facet(
-        column=alt.Column("Antibiotic:N", title="Antibiotic")
-    ).properties(
-        width=220,
-        height=400,
-        title="Success of Antibiotics"
     )
+
+    bars = main.mark_bar()    
 
 # line of refrence for negative MIC values
 
-reference_line=alt.Chart(pd.DataFrame({"log_MIC": [0]})).mark_rule(
-    color="black", strokeDash=[4, 4]
-).encode(y='y:Q')
+    reference_line=alt.Chart(pd.DataFrame({"log_MIC": [0]})).mark_rule(
+        color="black",
+        strokeDash=[4, 4]
+    ).encode(x="x:Q")
+
+    #resistance zone
+    high_resistance = alt.Chart(pd.DataFrame({
+        "x": [2],  # = log10(100)
+    })).mark_rule(
+        strokeDash=[6, 4],
+        color="black"
+        ).encode(x="x:Q")
+
+    final = alt.layer(bars, reference_line, high_resistance).properties(
+        width=700,
+        height=600,
+        title="Antibiotic Potency Against Bacterial Species"
+    )
+
+    st.altair_chart(final, use_container_width=True)
+else:
+    st.warning("No data matches the selected filters.")
+
+
+
+
+
+
+# Surrounding explanation
+st.markdown("""
+🔹 Notice how **Penicillin** has much **higher MIC values** for **Gram-negative** strains.  
+🔹 This suggests it's far less effective due to the extra outer membrane found in Gram-negative bacteria.
+
+Meanwhile, **Neomycin** and **Streptomycin** appear to perform more consistently across both groups.
+""")
+
+
+
+# final comments: 
+# The lower MIC, the more potent the antibiotic!
+
+#Add highlight Penicillin's high MIC in Gram-negative) ?
+# highlight = alt.Chart(pd.DataFrame({
+#     "Antibiotic": ["Penicillin"],
+#     "Gram_Staining": ["negative"],
+#     "MIC": [850]
+# })).mark_point(
+#     shape="triangle", size=100, color="crimson"
+# ).encode(
+#     x=alt.X("Antibiotic", type="nominal"), #needed to manually specify type here.
+#     y=alt.Y("MIC:Q")
+# )
+
+# st.altair_chart(overview_chart + highlight, use_container_width=True)
+
+

@@ -28,13 +28,7 @@ st.markdown("""
     Note a bacteria's  **Gram stain classification** — either **positive** or **negative** — and how it plays a major role in how well antibiotics work.\n
     Use the filters to start exploring :)
 """)
-
-# # filter options
-# selected_antibiotics = st.multiselect(
-#     "*Choose an antibiotic(s) to start analyzing:*",
-#     options = df_melted["Antibiotic"].unique(),
-#     default = ["Penicillin", "Streptomycin", "Neomycin"]
-#     )
+#filters
 selected_gram_type = st.radio(
     "Select Gram Type", ["positive", "negative"]
 )
@@ -46,7 +40,6 @@ selected_genus = st.multiselect(
 
 # filtering applications
 filtered_df = df_melted[
-    # (df_melted["Antibiotic"].isin(selected_antibiotics)) &
     (df_melted["Gram_Staining"].isin([selected_gram_type])) &
     (df_melted["Genus"].isin(selected_genus))
 ]
@@ -54,16 +47,19 @@ filtered_df = df_melted[
 if filtered_df.empty:
     st.warning("No data matches your filters. Try adjusting your selections.")
 else:
-    base = alt.Chart(filtered_df) 
-    # Base faceted bar chart
+    if len(filtered_df) < 3:
+        st.info("Only a few bacteria match your filters, so the chart may look compressed.")
+
+    base = alt.Chart(filtered_df).properties(height=150)
+# Base of faceted bar chart
     bar_chart = base.mark_bar().encode(
         x=alt.X("log_MIC:Q", title="Log MIC)", scale=alt.Scale(domain=[-3, 3])),
         y=alt.Y("Bacteria:N", sort='-x', title="Bacteria"),
-        color=alt.Color("Antibiotic:N", legend=None),
+        color=alt.Color("Antibiotic:N", title="Antibiotic"),
         tooltip=["Bacteria", "Antibiotic", "MIC", "Gram_Staining", "Genus"]
     )
 
-    # Vertical reference line at MIC = 1 (log_MIC = 0)
+# Vertical reference line at MIC = 1 (log_MIC = 0)
     center_line = alt.Chart(filtered_df).mark_rule(
         color="black",
         strokeDash=[4, 4]
@@ -71,14 +67,18 @@ else:
         x="0"
     ).encode(x="x:Q")
 
-    # Labels for "<-- More Effective / Less Effective -->"
+# Labels for "<-- More Effective / Less Effective -->"
+
+    if not filtered_df.empty:
+        top_bacteria = filtered_df["Bacteria"].iloc[0]
+
     center_label = alt.Chart(pd.DataFrame({
         "x": [-1, 1],
-        "y": [filtered_df["Bacteria"].iloc[0]] * 2,
-        "label": ["<-- More Effective", "Less Effective -->"]
+        "y": [top_bacteria] * 2,
+        "label": ["<-- More Effective", "Less Effective -->"],
     })).mark_text(
         align='center',
-        baseline="bottom",
+        baseline="top",
         fontStyle="italic",
         fontSize=11,
         dy=-25
@@ -88,7 +88,7 @@ else:
         text="label"
     )
 
-    # line at MIC = 100 (log_MIC = 2)
+# line at MIC = 100 (log_MIC = 2)
     resistance_line = alt.Chart(filtered_df).mark_rule(
         strokeDash=[6, 4],
         color="red"
@@ -97,36 +97,29 @@ else:
         x="2"
     ).encode(x="x:Q")
 
-    # Label for high resistance 
-    top_bacteria = filtered_df["Bacteria"].iloc[0]
-    resistance_label = alt.Chart(pd.DataFrame({
-        "x": [2],
-        "y": [top_bacteria],
-        "label": ["→ High Resistancy"]
-    })).mark_text(
-        align='left',
-        baseline='middle',
-        dx=6,
-        dy=120,
-        color="red",
-        fontWeight="bold"
-    ).encode(
-        x="x:Q",
-        y=alt.Y("y:N", sort='-x'),
-        text="label:N"
-    )
 
-    # Combine layers
+    # Highly effective threshold at log_MIC = -1
+    effective_line = alt.Chart(filtered_df).mark_rule(
+        strokeDash=[6, 4],
+        color="green"
+    ).transform_calculate(
+        x="-1"
+    ).encode(x="x:Q")
+
+
+# Combining layers
     full_layer = (
         bar_chart +
         center_line +
         center_label +
         resistance_line +
-        resistance_label
+        # resistance_label +
+        # effective_label +
+        effective_line
     )
     
 
-    # Facet by Antibiotic
+# Facet by Antibiotic
     faceted_chart = full_layer.facet(
         row=alt.Row("Antibiotic:N", sort=["Penicillin", "Streptomycin", "Neomycin"], title=None)
     ).resolve_scale(
@@ -137,123 +130,36 @@ else:
         bounds="flush"
     )
 
-    # Display
+# Display all
     st.altair_chart(faceted_chart, use_container_width=True)
+    st.markdown("""
+    🔹 The red dotted line indicates a high resistancy threshold, the green dotted line indicates a high effectiveness threshold. \n
+    """)
+    with st.expander("💡 Filter Navigation Tips"):
+        st.markdown("""
+        - The **Gram Type** toggle helps distinguish between bacteria with different cell wall structures.
+        - Use the **Genus selector** to explore specific types of bacteria or narrow your focus.
+        - Try starting with all types, then refine based on what stands out!
+        """)
 
+    with st.expander("🔬 Understanding MIC & Thresholds"):
+        st.markdown("""
+        - **MIC (Minimum Inhibitory Concentration)** is the lowest antibiotic concentration that stops bacterial growth, a few lines are constant for convenience.
+        - The chart uses **log₁₀(MIC)** to better compare ranges:
+            - Values **< 0** → *More effective antibiotic*
+            - Values **> 2** → *Possible resistance*
+        - Vertical lines in the chart show:
+            - `log(MIC) = 0`: baseline effectiveness
+            - `log(MIC) = 2`: resistance threshold
+        """)
 
+    with st.expander("📊 Key Insight"):
+        st.markdown("""
+        - **Penicillin** is generally **highly effective** against **Gram-positive** bacteria.
+        - **Gram-negative** bacteria often resist Penicillin due to their **outer membrane**.
+        - **Streptomycin** and **Neomycin** show broader effectiveness, but vary across genera.\n
+        🔹 Notice how **Penicillin** has much **higher MIC values** for **Gram-negative** strains.\n  
+        🔹 This suggests it's far less effective due to the extra outer membrane found in Gram-negative bacteria.\n
+        🔹 **Neomycin** and **Streptomycin** appear to perform more consistently across both groups.
 
-
-
-#
-# 1st rendering
-
-# if not filtered_df.empty:
-#     main = alt.Chart(filtered_df).mark_bar().encode(
-#         x=alt.X("log_MIC:Q", title="log₁₀(MIC μg/mL)"),
-        
-#         y=alt.Y("Bacteria:N", sort="-x", #order by MIC hi-lo
-#             title="Bacteria"),
-
-#         color=alt.Color(
-#             "Antibiotic:N",
-#             scale=alt.Scale(scheme="set1"),
-#             legend=alt.Legend(title="Antibiotic")
-#         ),
-#         tooltip=["Bacteria", "Antibiotic", "MIC", "Gram_Staining", "Genus"]
-#     )  
-
-#     center_line = alt.Chart(pd.DataFrame({"x": [0]})).mark_rule(
-#         color="black",
-#         strokeDash=[4, 4]
-#     ).encode(x="x:Q")
-
-#     #label center
-#     center_label = alt.Chart(pd.DataFrame({
-#         "x": [-1, 1],
-#         "y": [filtered_df["Bacteria"].iloc[0]] * 2, #anchor at top bar
-#         "label": ["<-- More Effective", "Less Effective -->"],
-#         "dx": [-70, 70] #shift to format
-#     })).mark_text(
-#         align='center',
-#         baseline="bottom",
-#         fontStyle="italic",
-#         fontSize=11,
-#         dy=-25,
-#     ).encode(
-#         x="x:Q",
-#         y=alt.Y("y:N", sort="-x"),
-#         text="label"
-#         # dx="dx:Q"
-#     )
-
-# #resistance zone
-#     high_resistance = alt.Chart(pd.DataFrame({
-#         "x": [2],  # = log10(100)
-#     })).mark_rule(
-#         strokeDash=[6, 4],
-#         color="red"
-#         ).encode(x="x:Q")
-    
-#     #label
-
-#     resistant_label = alt.Chart(pd.DataFrame({
-#         "x": [2],
-#         "y": [filtered_df["Bacteria"].iloc[0]],  # Place near top bacterium in current view
-#         "label": ["→ High Resistancy"]
-#     })).mark_text(
-#         align='left',
-#         baseline='middle',
-#         dx=6,  # shift text to the right
-#         dy=120,
-#         color="red",
-#         fontWeight="bold"
-#     ).encode(
-#         x="x:Q",
-#         y=alt.Y("y:N", sort="-x"),  # ensure y is interpreted as categorical
-#         text="label"
-#     )
-
-
-#     final = alt.layer(main, high_resistance, resistant_label, center_line, center_label).properties(
-#         width=700,
-#         height=600,
-#         title="Antibiotic Potency Against Bacteria"
-#     )
-
-#     st.altair_chart(final, use_container_width=True)
-# else:
-#     st.warning("No data matches the selected filters.")
-
-
-
-
-
-
-# Surrounding explanation
-st.markdown("""
-🔹 Notice how **Penicillin** has much **higher MIC values** for **Gram-negative** strains.  
-🔹 This suggests it's far less effective due to the extra outer membrane found in Gram-negative bacteria.
-
-Meanwhile, **Neomycin** and **Streptomycin** appear to perform more consistently across both groups.
-""")
-
-
-
-# final comments: 
-# The lower MIC, the more potent the antibiotic!
-
-#Add highlight Penicillin's high MIC in Gram-negative) ?
-# highlight = alt.Chart(pd.DataFrame({
-#     "Antibiotic": ["Penicillin"],
-#     "Gram_Staining": ["negative"],
-#     "MIC": [850]
-# })).mark_point(
-#     shape="triangle", size=100, color="crimson"
-# ).encode(
-#     x=alt.X("Antibiotic", type="nominal"), #needed to manually specify type here.
-#     y=alt.Y("MIC:Q")
-# )
-
-# st.altair_chart(overview_chart + highlight, use_container_width=True)
-
-
+        """)

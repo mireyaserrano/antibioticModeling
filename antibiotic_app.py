@@ -35,12 +35,12 @@ selected_gram_type = st.radio(
 selected_genus = st.multiselect(
     "Select Bacterial Genus",
     options = sorted(df_melted["Genus"].unique()),
-    default = df_melted["Genus"].unique()
+    default = sorted(df_melted["Genus"].unique())
 )
 
 # filtering applications
 filtered_df = df_melted[
-    (df_melted["Gram_Staining"].isin([selected_gram_type])) &
+    (df_melted["Gram_Staining"] == selected_gram_type) &
     (df_melted["Genus"].isin(selected_genus))
 ]
 
